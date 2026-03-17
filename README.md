@@ -34,10 +34,11 @@ changing, or structurally ambiguous.
 
 ## Installation
 
-### From SSC (recommended)
+### From SSC
 
 ```stata
-ssc install causalspline
+* Coming soon to SSC
+* ssc install causalspline
 ```
 
 ### Manual installation
@@ -135,9 +136,8 @@ cs_simulate 500, dgp(sinusoidal)   /* oscillatory / complex */
 ## Companion R Package
 
 This Stata package is a port of the
-[CausalSpline R package](https://github.com/causalfragility-lab/CausalSpline)
-(submitted to CRAN). Both packages implement identical methodology and produce
-comparable results.
+[CausalSpline R package](https://github.com/causalfragility-lab/CausalSpline).
+Both packages implement identical methodology and produce comparable results.
 
 ---
 
@@ -162,7 +162,7 @@ which causalspline
 
 Or cite as:
 
-> Hait, S. (2025). *causalspline: Nonlinear Causal Dose-Response Estimation
+> Hait, S. (2026). *causalspline: Nonlinear Causal Dose-Response Estimation
 > via Splines*. Stata package.
 > https://github.com/causalfragility-lab/CausalSpline-Stata
 
