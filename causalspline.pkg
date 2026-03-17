@@ -1,0 +1,23 @@
+v 3
+d causalspline: Nonlinear Causal Dose-Response Estimation via Splines
+d
+d Author: Subir Hait, Michigan State University
+d Support: haitsubi@msu.edu
+d
+d causalspline estimates the causal dose-response function E[Y(t)]
+d for a continuous treatment T under unconfoundedness using restricted
+d cubic splines. Implements IPW, G-computation, and doubly-robust
+d estimation. Includes geometric fragility diagnostics for evaluating
+d the structural stability of estimated dose-response curves.
+d
+d Requires: Stata 14.1 or later
+d
+f causalspline.ado
+f causalspline.sthlp
+f cs_fragility.ado
+f cs_gradient.ado
+f cs_overlap.ado
+f cs_plot.ado
+f cs_region.ado
+f cs_simulate.ado
+f causalspline_example.do

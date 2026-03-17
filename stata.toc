@@ -1,0 +1,7 @@
+v 3
+d CausalSpline-Stata: Nonlinear Causal Dose-Response Estimation via Splines
+d Subir Hait, Michigan State University
+d haitsubi@msu.edu
+d Distribution-Date: 20260317
+d
+p causalspline Nonlinear causal dose-response estimation via splines
