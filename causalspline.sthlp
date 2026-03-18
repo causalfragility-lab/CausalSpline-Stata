@@ -94,28 +94,28 @@ After {cmd:causalspline}, the following companion commands are available:
 {title:Stored results}
 
 {pstd}
-{cmd:causalspline} stores the following in {cmd:e()}:
+{cmd:causalspline} stores the following in {cmd:r()}:
 
 {synoptset 18 tabbed}{...}
 {p2col 5 18 22 2: Scalars}{p_end}
-{synopt:{cmd:e(n)}}sample size{p_end}
-{synopt:{cmd:e(t_min)}}minimum treatment value{p_end}
-{synopt:{cmd:e(t_max)}}maximum treatment value{p_end}
-{synopt:{cmd:e(ess)}}effective sample size (IPW/DR only){p_end}
-{synopt:{cmd:e(ess_pct)}}ESS as % of n (IPW/DR only){p_end}
-{synopt:{cmd:e(evalgrid)}}number of evaluation points{p_end}
-{synopt:{cmd:e(dfexposure)}}spline df for exposure{p_end}
+{synopt:{cmd:r(n)}}sample size{p_end}
+{synopt:{cmd:r(t_min)}}minimum treatment value{p_end}
+{synopt:{cmd:r(t_max)}}maximum treatment value{p_end}
+{synopt:{cmd:r(ess)}}effective sample size (IPW/DR only){p_end}
+{synopt:{cmd:r(ess_pct)}}ESS as % of n (IPW/DR only){p_end}
+{synopt:{cmd:r(evalgrid)}}number of evaluation points{p_end}
+{synopt:{cmd:r(dfexposure)}}spline df for exposure{p_end}
 {p2col 5 18 22 2: Matrices}{p_end}
-{synopt:{cmd:e(curve_t)}}treatment grid (ng x 1){p_end}
-{synopt:{cmd:e(curve_est)}}estimated E[Y(t)] (ng x 1){p_end}
-{synopt:{cmd:e(curve_se)}}bootstrap SE (ng x 1){p_end}
-{synopt:{cmd:e(curve_lo)}}lower CI bound (ng x 1){p_end}
-{synopt:{cmd:e(curve_hi)}}upper CI bound (ng x 1){p_end}
+{synopt:{cmd:r(curve_t)}}treatment grid (ng x 1){p_end}
+{synopt:{cmd:r(curve_est)}}estimated E[Y(t)] (ng x 1){p_end}
+{synopt:{cmd:r(curve_se)}}bootstrap SE (ng x 1){p_end}
+{synopt:{cmd:r(curve_lo)}}lower CI bound (ng x 1){p_end}
+{synopt:{cmd:r(curve_hi)}}upper CI bound (ng x 1){p_end}
 {p2col 5 18 22 2: Macros}{p_end}
-{synopt:{cmd:e(method)}}estimation method{p_end}
-{synopt:{cmd:e(outcome)}}outcome variable name{p_end}
-{synopt:{cmd:e(treatment)}}treatment variable name{p_end}
-{synopt:{cmd:e(cmd)}}causalspline{p_end}
+{synopt:{cmd:r(method)}}estimation method{p_end}
+{synopt:{cmd:r(outcome)}}outcome variable name{p_end}
+{synopt:{cmd:r(treatment)}}treatment variable name{p_end}
+{synopt:{cmd:r(cmd)}}causalspline{p_end}
 
 
 {title:Examples}
@@ -190,12 +190,12 @@ Imbens, G.W. (2000). The role of the propensity score in estimating
 dose-response functions. {it:Biometrika}, 87(3), 706-710.
 
 {phang}
-Robins, J.M., Hern?n, M.A. & Brumback, B. (2000). Marginal structural
+Robins, J.M., Hernan, M.A. & Brumback, B. (2000). Marginal structural
 models and causal inference in epidemiology.
 {it:Epidemiology}, 11(5), 550-560.
 
 {phang}
-Hait, S. (2025). CausalSpline: Nonlinear Causal Dose-Response Estimation
+Hait, S. (2026). CausalSpline: Nonlinear Causal Dose-Response Estimation
 via Splines. R package v0.1.0.
 https://github.com/causalfragility-lab/CausalSpline
 
