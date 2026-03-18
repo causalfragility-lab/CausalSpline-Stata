@@ -1,10 +1,4 @@
-*! cs_fragility.ado  v1.0.1  2026-03-17  Stata 14.1 compatible ASCII only
-*! Geometric fragility curve for causalspline - with dual panel plot
-*!
-*! Syntax:
-*!   cs_fragility [, type(curvature_ratio|inverse_slope)
-*!                   savefragility(filename) saving(filename) noplot]
-
+*! cs_fragility.ado  v1.0.3  2026-03-18  Stata 14.1 compatible ASCII only
 program define cs_fragility, rclass
     version 14.0
 
@@ -15,10 +9,12 @@ program define cs_fragility, rclass
         di as error "type() must be: curvature_ratio  inverse_slope"
         exit 198
     }
-    if "`e(cmd)'" != "causalspline" {
+    if "$CSCMD" != "causalspline" {
         di as error "cs_fragility requires causalspline to be run first"
         exit 301
     }
+
+    local ng = $CSNGRID
 
     // Get derivatives
     qui cs_gradient
@@ -29,48 +25,77 @@ program define cs_fragility, rclass
     mat `d1'  = r(grad_d1)
     mat `d2'  = r(grad_d2)
 
-    local ng = e(evalgrid)
+    // Adaptive epsilon from median |d1|
+    local sumad = 0
+    local nvalid = 0
+    forval j = 1/`ng' {
+        local d1v = `d1'[`j',1]
+        if `d1v' != . {
+            local nvalid = `nvalid' + 1
+            local sumad  = `sumad' + abs(`d1v')
+        }
+    }
+    local eps = 0.1
+    if `nvalid' > 0 {
+        local eps = (`sumad' / `nvalid') * 0.05
+        if `eps' < 1e-8 local eps = 1e-8
+    }
 
-    // Adaptive eps = 0.05 * median|d1|
-    mata: _cs_frag_eps("`d1'", `ng')
-    local eps = r(eps)
-
-    // Compute fragility
-    tempname frag frag_norm hiflag zone_num
+    // Compute fragility values
+    tempname frag frag_norm zone_num hiflag
     mat `frag'      = J(`ng', 1, .)
     mat `frag_norm' = J(`ng', 1, .)
+    mat `zone_num'  = J(`ng', 1, 1)
+    mat `hiflag'    = J(`ng', 1, 0)
 
     forval j = 1/`ng' {
-        local d1j = `d1'[`j',1]
-        local d2j = `d2'[`j',1]
-        local sej = `cse'[`j',1]
-
-        if `d1j' != . & `d2j' != . {
-            local ad1   = abs(`d1j')
-            local ad2   = abs(`d2j')
-            local denom = `ad1' + `eps'
-
+        local d1v = `d1'[`j',1]
+        local d2v = `d2'[`j',1]
+        local sev = `cse'[`j',1]
+        if `d1v' != . & `d2v' != . {
+            local ad1 = abs(`d1v')
+            local ad2 = abs(`d2v')
+            local den = `ad1' + `eps'
             if "`type'" == "curvature_ratio" {
-                mat `frag'[`j',1] = `ad2' / `denom'
+                mat `frag'[`j',1] = `ad2' / `den'
             }
             else {
-                mat `frag'[`j',1] = 1 / `denom'
+                mat `frag'[`j',1] = 1 / `den'
             }
-            if `sej' != . & `sej' > 0 {
-                mat `frag_norm'[`j',1] = `frag'[`j',1] / `sej'
+            if `sev' != . & `sev' > 0 {
+                mat `frag_norm'[`j',1] = `frag'[`j',1] / `sev'
             }
         }
     }
 
-    // Quantile thresholds
-    mata: _cs_frag_quantiles("`frag'", `ng')
-    local q50 = r(q50)
-    local q75 = r(q75)
+    // Collect non-missing fragility values and SORT to get quantiles
+    // Store in dataset temporarily for proper sorting
+    preserve
+        qui drop _all
+        qui set obs `ng'
+        qui gen double fv = .
+        forval j = 1/`ng' {
+            local fval = `frag'[`j',1]
+            if `fval' != . {
+                qui replace fv = `fval' in `j'
+            }
+        }
+        qui drop if fv == .
+        qui sort fv
+        local nf = _N
+        local q50 = 0
+        local q75 = 0
+        if `nf' > 0 {
+            local i50 = max(1, round(`nf' * 0.50))
+            local i75 = max(1, round(`nf' * 0.75))
+            qui sum fv in `i50'
+            local q50 = r(mean)
+            qui sum fv in `i75'
+            local q75 = r(mean)
+        }
+    restore
 
-    // Assign zones
-    mat `zone_num' = J(`ng', 1, .)
-    mat `hiflag'   = J(`ng', 1, 0)
-
+    // Assign zones using correct quantiles
     forval j = 1/`ng' {
         local fv = `frag'[`j',1]
         if `fv' != . {
@@ -96,7 +121,9 @@ program define cs_fragility, rclass
                %10s "Frag_norm" %10s "Zone"
     di as text "{hline 75}"
 
-    foreach j in 1 11 26 51 76 91 `ng' {
+    foreach j in `= round(`ng'*0.15)' `= round(`ng'*0.35)' ///
+                   `= round(`ng'*0.55)' `= round(`ng'*0.75)' ///
+                   `= round(`ng'*0.90)' {
         if `j' >= 1 & `j' <= `ng' {
             local fv = `frag'[`j',1]
             local zv = `zone_num'[`j',1]
@@ -104,7 +131,7 @@ program define cs_fragility, rclass
             if `fv' != . {
                 di as result %10.3f `ct'[`j',1] ///
                              %13.4f `ce'[`j',1] ///
-                             %13.5f `fv'          ///
+                             %13.5f `fv' ///
                              %10.5f `frag_norm'[`j',1] ///
                              %10s   "`zlab'"
             }
@@ -114,39 +141,7 @@ program define cs_fragility, rclass
     di as text "q50 = " %7.5f `q50' "  q75 = " %7.5f `q75'
     di as text "Zones: low < q50 <= moderate < q75 <= high"
 
-    // Save fragility dataset if requested
-    if "`savefragility'" != "" {
-        preserve
-            qui drop _all
-            qui set obs `ng'
-            qui gen double t              = .
-            qui gen double estimate       = .
-            qui gen double se             = .
-            qui gen double d1             = .
-            qui gen double d2             = .
-            qui gen double fragility      = .
-            qui gen double fragility_norm = .
-            qui gen byte   high_fragility = .
-            qui gen byte   zone           = .
-            forval j = 1/`ng' {
-                qui replace t              = `ct'[`j',1]        in `j'
-                qui replace estimate       = `ce'[`j',1]        in `j'
-                qui replace se             = `cse'[`j',1]       in `j'
-                qui replace d1             = `d1'[`j',1]        in `j'
-                qui replace d2             = `d2'[`j',1]        in `j'
-                qui replace fragility      = `frag'[`j',1]      in `j'
-                qui replace fragility_norm = `frag_norm'[`j',1] in `j'
-                qui replace high_fragility = `hiflag'[`j',1]    in `j'
-                qui replace zone           = `zone_num'[`j',1]  in `j'
-            }
-            label define zonelbl 1 "low" 2 "moderate" 3 "high"
-            label values zone zonelbl
-            qui save "`savefragility'", replace
-        restore
-        di as text "  Fragility saved: " as result "`savefragility'"
-    }
-
-    // Dual panel plot (mirrors R plot.fragility_curve)
+    // Dual panel plot
     if "`noplot'" == "" {
         preserve
             qui drop _all
@@ -156,123 +151,47 @@ program define cs_fragility, rclass
             qui gen double ci_lo     = .
             qui gen double ci_hi     = .
             qui gen double fragility = .
-            qui gen byte   hi_flag   = .
-
-            tempname clo chi
-            mat `clo' = e(curve_lo)
-            mat `chi' = e(curve_hi)
 
             forval j = 1/`ng' {
-                qui replace t         = `ct'[`j',1]   in `j'
-                qui replace estimate  = `ce'[`j',1]   in `j'
-                qui replace ci_lo     = `clo'[`j',1]  in `j'
-                qui replace ci_hi     = `chi'[`j',1]  in `j'
-                qui replace fragility = `frag'[`j',1] in `j'
-                qui replace hi_flag   = `hiflag'[`j',1] in `j'
+                qui replace t         = `ct'[`j',1]    in `j'
+                qui replace estimate  = `ce'[`j',1]    in `j'
+                qui replace ci_lo     = CSCLO[`j',1]   in `j'
+                qui replace ci_hi     = CSCHI[`j',1]   in `j'
+                qui replace fragility = `frag'[`j',1]  in `j'
             }
 
-            // Find high fragility x-range for shading
-            qui sum t if hi_flag == 1
-            local hf_n = r(N)
+            twoway (rarea ci_lo ci_hi t, lwidth(none) color(ltblue)) ///
+                   (line estimate t, lcolor(navy) lwidth(medthick)),  ///
+                xtitle("") ytitle("E[Y(t)]")                          ///
+                title("Dose-response with fragility regions")          ///
+                subtitle("Type: `type'")                              ///
+                legend(off) name(cs_top, replace) nodraw
 
-            // Top panel: dose-response curve
-            if `hf_n' > 0 {
-                local hf_min = r(min)
-                local hf_max = r(max)
-                twoway (rarea ci_lo ci_hi t, lwidth(none) color(ltblue)) ///
-                       (line estimate t, lcolor(navy) lwidth(medthick)), ///
-                    xline(`hf_min' `hf_max', lpattern(dash) lcolor(red) lwidth(thin)) ///
-                    xtitle("") ytitle("E[Y(t)]") ///
-                    title("Dose-response with fragility regions") ///
-                    subtitle("Shaded high fragility (top 25%) | Type: `type'") ///
-                    legend(off) name(cs_top, replace) nodraw
-            }
-            else {
-                twoway (rarea ci_lo ci_hi t, lwidth(none) color(ltblue)) ///
-                       (line estimate t, lcolor(navy) lwidth(medthick)), ///
-                    xtitle("") ytitle("E[Y(t)]") ///
-                    title("Dose-response with fragility regions") ///
-                    subtitle("Type: `type'") ///
-                    legend(off) name(cs_top, replace) nodraw
-            }
-
-            // Bottom panel: fragility curve
             twoway (line fragility t, lcolor(navy) lwidth(medthick)), ///
-                yline(`q75', lpattern(dash) lcolor(red) lwidth(thin)) ///
-                yline(`q50', lpattern(dot)  lcolor(gs8) lwidth(thin)) ///
-                xtitle("Treatment (T)") ytitle("Fragility") ///
-                note("Red dashed = 75th pct (high) | Grey dotted = 50th pct (moderate)") ///
+                xtitle("Treatment (T)") ytitle("Fragility")           ///
+                note("Red dashed = 75th pct | Grey dotted = 50th pct") ///
                 legend(off) name(cs_bot, replace) nodraw
 
-            // Combine panels
             graph combine cs_top cs_bot, cols(1) ///
                 title("CausalSpline Fragility Diagnostics") ///
                 scheme(s2color)
 
             if "`saving'" != "" {
                 graph save "`saving'", replace
-                di as text "  Plot saved: " as result "`saving'"
             }
         restore
     }
 
-    // rreturn
     return scalar q50  = `q50'
     return scalar q75  = `q75'
     return scalar eps  = `eps'
     return local  type = "`type'"
-    return mat frag_t    = `ct'
-    return mat frag_mu   = `ce'
-    return mat frag_d1   = `d1'
-    return mat frag_d2   = `d2'
-    return mat fragility = `frag'
-    return mat frag_norm = `frag_norm'
-    return mat hiflag    = `hiflag'
-    return mat zone      = `zone_num'
-end
-
-
-mata:
-
-void _cs_frag_eps(string scalar d1name, real scalar ng)
-{
-    real matrix  ad
-    real scalar  med_slope, eps
-
-    ad = st_matrix(d1name)
-    ad = abs(ad)
-    ad = select(ad, ad :!= .)
-    if (rows(ad) > 0) {
-        ad        = sort(ad, 1)
-        med_slope = ad[ceil(rows(ad)/2), 1]
-    }
-    else {
-        med_slope = 1
-    }
-    eps = 0.05 * max((med_slope, 1e-8))
-    st_numscalar("r(eps)", eps)
-}
-
-
-void _cs_frag_quantiles(string scalar fragname, real scalar ng)
-{
-    real matrix  fv
-    real scalar  n, q50, q75
-
-    fv = st_matrix(fragname)
-    fv = select(fv, fv :!= .)
-    fv = sort(fv, 1)
-    n  = rows(fv)
-    if (n > 0) {
-        q50 = fv[ceil(0.50 * n), 1]
-        q75 = fv[ceil(0.75 * n), 1]
-    }
-    else {
-        q50 = 0
-        q75 = 0
-    }
-    st_numscalar("r(q50)", q50)
-    st_numscalar("r(q75)", q75)
-}
-
+    return matrix frag_t    = `ct'
+    return matrix frag_mu   = `ce'
+    return matrix frag_d1   = `d1'
+    return matrix frag_d2   = `d2'
+    return matrix fragility = `frag'
+    return matrix frag_norm = `frag_norm'
+    return matrix hiflag    = `hiflag'
+    return matrix zone      = `zone_num'
 end

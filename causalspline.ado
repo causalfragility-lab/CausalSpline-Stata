@@ -1,6 +1,6 @@
-*! causalspline.ado  v1.0.3  2026-03-17
-*! Stata 14.1 compatible - ASCII only - no mkspline for knots
-program define causalspline, eclass
+*! causalspline.ado  v1.0.4  2026-03-18
+*! Stata 14.1 compatible - ASCII only - rclass
+program define causalspline, rclass
     version 14.0
 
     syntax [if] [in] ,           ///
@@ -48,22 +48,20 @@ program define causalspline, eclass
         di as text "Treatment range: [" %6.3f `t_min' ",  " %6.3f `t_max' "]"
     }
 
-    // Compute knot positions at quantiles using _pctile
     local nknots = `dfexposure' - 1
     if `nknots' < 1 local nknots = 1
     if `nknots' > 6 local nknots = 6
 
     _pctile `treatment' if `touse', nquantiles(`= `nknots' + 1')
-    mat _cs_knots = J(1, `nknots', .)
+    mat csknots = J(1, `nknots', .)
     forval ki = 1/`nknots' {
-        mat _cs_knots[1, `ki'] = r(r`ki')
+        mat csknots[1, `ki'] = r(r`ki')
     }
 
     if "`verbose'" != "" {
         di as text "  Interior knots: " `nknots'
     }
 
-    // IPW weights
     tempvar ipw_w
     local ess     = .
     local ess_pct = .
@@ -139,7 +137,8 @@ program define causalspline, eclass
     di as text "{hline 65}"
     di as text "n = " as result `n'
     if inlist("`method'", "ipw", "dr") {
-        di as text "ESS = " as result %6.1f `ess' as text "  (" as result `ess_pct' as text "%)"
+        di as text "ESS = " as result %6.1f `ess' ///
+            as text "  (" as result `ess_pct' as text "%)"
     }
     di as text "Bootstrap reps = " as result `bootreps'
 
@@ -164,31 +163,57 @@ program define causalspline, eclass
         di as text "  Curve saved: " as result "`savecurve'"
     }
 
-    ereturn clear
-    ereturn scalar n          = `n'
-    ereturn scalar t_min      = `t_min'
-    ereturn scalar t_max      = `t_max'
-    ereturn scalar t_mean     = `t_mean'
-    ereturn scalar t_sd       = `t_sd'
-    ereturn scalar evalgrid   = `evalgrid'
-    ereturn scalar dfexposure = `dfexposure'
-    ereturn scalar level      = `level'
-    ereturn scalar bootreps   = `bootreps'
+    // Persistent storage for companion commands
+    // globals for scalars/strings, named matrices for curve data
+    global CSCMD        "causalspline"
+    global CSMETHOD     "`method'"
+    global CSOUTCOME    "`outcome'"
+    global CSTREATMENT  "`treatment'"
+    global CSCONF       "`confounders'"
+    global CSN          "`n'"
+    global CSTMIN       "`t_min'"
+    global CSTMAX       "`t_max'"
+    global CSTMEAN      "`t_mean'"
+    global CSTSD        "`t_sd'"
+    global CSNGRID      "`evalgrid'"
+    global CSDF         "`dfexposure'"
+    global CSLEV        "`level'"
+    global CSBREPS      "`bootreps'"
+    global CSESS        "`ess'"
+    global CSESPCT      "`ess_pct'"
+
+    cap matrix drop CSCT CSCE CSCSE CSCLO CSCHI
+    matrix CSCT  = `ct'
+    matrix CSCE  = `ce'
+    matrix CSCSE = `cse'
+    matrix CSCLO = `clo'
+    matrix CSCHI = `chi'
+
+    // Return via r() for immediate post-command access
+    return scalar n          = `n'
+    return scalar t_min      = `t_min'
+    return scalar t_max      = `t_max'
+    return scalar t_mean     = `t_mean'
+    return scalar t_sd       = `t_sd'
+    return scalar evalgrid   = `evalgrid'
+    return scalar dfexposure = `dfexposure'
+    return scalar level      = `level'
+    return scalar bootreps   = `bootreps'
     if inlist("`method'", "ipw", "dr") {
-        ereturn scalar ess     = `ess'
-        ereturn scalar ess_pct = `ess_pct'
+        return scalar ess     = `ess'
+        return scalar ess_pct = `ess_pct'
     }
-    ereturn mat curve_t   = `ct'
-    ereturn mat curve_est = `ce'
-    ereturn mat curve_se  = `cse'
-    ereturn mat curve_lo  = `clo'
-    ereturn mat curve_hi  = `chi'
-    ereturn local method      "`method'"
-    ereturn local outcome     "`outcome'"
-    ereturn local treatment   "`treatment'"
-    ereturn local confounders "`confounders'"
-    ereturn local cmd         "causalspline"
-    ereturn local title       "Causal Dose-Response (Spline)"
+    return matrix curve_t   = `ct'
+    return matrix curve_est = `ce'
+    return matrix curve_se  = `cse'
+    return matrix curve_lo  = `clo'
+    return matrix curve_hi  = `chi'
+    return local method      "`method'"
+    return local outcome     "`outcome'"
+    return local treatment   "`treatment'"
+    return local confounders "`confounders'"
+    return local cmd         "causalspline"
+    return local title       "Causal Dose-Response (Spline)"
 end
 
 
@@ -224,7 +249,7 @@ void _cs_main(string scalar yvar,
     st_view(X, ., tokens(xvars), touse)
     n = rows(Y)
 
-    knots  = st_matrix("_cs_knots")
+    knots  = st_matrix("csknots")
     t_grid = t_min :+ (0::ng-1) :* ((t_max - t_min) / (ng - 1))
 
     S_samp = _rcs(T,      knots, t_min, t_max, df)
@@ -392,7 +417,7 @@ real matrix _rcs(real colvector t, real matrix knots,
 
     for (k = 1; k <= df-1; k++) {
         if (k <= nk) {
-            kn_k   = knots[k]
+            kn_k = knots[k]
         }
         else {
             kn_k = knots[nk]

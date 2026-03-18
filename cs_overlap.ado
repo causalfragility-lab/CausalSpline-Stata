@@ -1,28 +1,25 @@
-*! cs_overlap.ado  v1.0.1  2026-03-17  Stata 14.1 compatible ASCII only
-*! Overlap / positivity diagnostics with histogram plot
-*!
-*! Syntax:
-*!   cs_overlap [, noplot saving(filename)]
+*! cs_overlap.ado  v1.0.2  2026-03-18  Stata 14.1 compatible ASCII only
+*! Overlap / positivity diagnostics
 
 program define cs_overlap, rclass
     version 14.0
 
     syntax [, NOPlot SAVing(string) ]
 
-    if "`e(cmd)'" != "causalspline" {
+    if "$CSCMD" != "causalspline" {
         di as error "cs_overlap requires causalspline to be run first"
         exit 301
     }
-    if !inlist(e(method), "ipw", "dr") {
+    if !inlist("$CSMETHOD", "ipw", "dr") {
         di as error "cs_overlap only available for method ipw or dr"
         exit 198
     }
 
-    local n       = e(n)
-    local ess     = e(ess)
-    local ess_pct = e(ess_pct)
-    local t_min   = e(t_min)
-    local t_max   = e(t_max)
+    local n       = $CSN
+    local ess     = $CSESS
+    local ess_pct = $CSESPCT
+    local t_min   = $CSTMIN
+    local t_max   = $CSTMAX
 
     di as text " "
     di as text "{hline 55}"
@@ -48,7 +45,7 @@ program define cs_overlap, rclass
     di as text "{hline 55}"
 
     if "`noplot'" == "" {
-        local tvar  = e(treatment)
+        local tvar  = "$CSTREATMENT"
         local ess_r = round(`ess', 0.1)
         local epct  = `ess_pct'
 

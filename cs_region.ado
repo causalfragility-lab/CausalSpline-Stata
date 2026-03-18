@@ -1,8 +1,5 @@
-*! cs_region.ado  v1.0.0  2026-03-17
-*! Regional fragility summary for causalspline
-*!
-*! Syntax:
-*!   cs_region, a(#) b(#) [type(curvature_ratio|inverse_slope)]
+*! cs_region.ado  v1.0.1  2026-03-18  Stata 14.1 compatible ASCII only
+*! Regional fragility integral over a treatment interval
 
 program define cs_region, rclass
     version 14.0
@@ -14,104 +11,82 @@ program define cs_region, rclass
         di as error "type() must be: curvature_ratio  inverse_slope"
         exit 198
     }
-    if `a' >= `b' {
-        di as error "a() must be less than b()"
-        exit 198
-    }
-    if "`e(cmd)'" != "causalspline" {
+
+    if "$CSCMD" != "causalspline" {
         di as error "cs_region requires causalspline to be run first"
         exit 301
     }
 
-    // -- Clamp interval to observed treatment support --------------------------
-    local t_min = e(t_min)
-    local t_max = e(t_max)
-    local a0 = max(`a', `t_min')
-    local b0 = min(`b', `t_max')
+    local t_min = $CSTMIN
+    local t_max = $CSTMAX
 
-    if `a0' >= `b0' {
-        di as error "Requested interval does not overlap observed support " ///
-            "[" `t_min' ", " `t_max' "]"
+    if `a' < `t_min' local a = `t_min'
+    if `b' > `t_max' local b = `t_max'
+    if `a' >= `b' {
+        di as error "a() must be less than b()"
         exit 198
     }
 
-    // -- Get fragility over full grid ------------------------------------------
-    qui cs_fragility, type(`type')
-    tempname ft frag
-    mat `ft'   = r(frag_t)
+    // Get fragility values from cs_fragility
+    qui cs_fragility, type(`type') noplot
+
+    tempname frag ft
     mat `frag' = r(fragility)
-    local ng = e(evalgrid)
+    mat `ft'   = r(frag_t)
 
-    // -- Extract points in [a0, b0] --------------------------------------------
-    // Collect into Mata for integration
-    mata: _cs_region_integrate("`ft'", "`frag'", `ng', `a0', `b0')
-    local integral = r(integral)
-    local average  = r(average)
-    local npoints  = r(npoints)
+    local ng    = rowsof(`frag')
+    local count = 0
+    local integ = 0
+    local avg   = 0
 
-    // -- Display ---------------------------------------------------------------
-    di as text _n "{hline 55}"
+    forval j = 1/`ng' {
+        local tv = `ft'[`j',1]
+        if `tv' >= `a' & `tv' <= `b' {
+            local fv = `frag'[`j',1]
+            if `fv' != . {
+                local integ = `integ' + `fv'
+                local count = `count' + 1
+            }
+        }
+    }
+
+    if `count' > 0 {
+        local avg = `integ' / `count'
+        // Trapezoidal integration
+        local width = (`b' - `a') / `count'
+        local integ = `integ' * `width'
+    }
+
+    di as text " "
+    di as text "{hline 55}"
     di as text " Regional Fragility Summary"
     di as text "{hline 55}"
-    di as text "  Interval       : [" %6.3f `a0' ", " %6.3f `b0' "]"
+    di as text "  Interval       : [" %6.3f `a' as text ", " %6.3f `b' as text "]"
     di as text "  Type           : " as result "`type'"
-    di as text "  Grid points    : " as result `npoints'
+    di as text "  Grid points    : " as result `count'
     di as text "{hline 55}"
-    di as text "  Integral fragility : " as result %10.5f `integral'
-    di as text "  Average fragility  : " as result %10.5f `average'
+    di as text "  Integral fragility : " as result %10.5f `integ'
+    di as text "  Average fragility  : " as result %10.5f `avg'
     di as text "{hline 55}"
 
-    // -- Interpretation guide -------------------------------------------------
-    di as text _n "  Interpretation (curvature_ratio):"
-    di as text "  < 0.5  : stable region (low curvature relative to slope)"
-    di as text "  0.5-2  : moderate structural change"
-    di as text "  > 2    : high fragility (threshold / turning point)"
-
-    // -- rreturn ---------------------------------------------------------------
-    return scalar a                 = `a0'
-    return scalar b                 = `b0'
-    return scalar integral_fragility = `integral'
-    return scalar average_fragility  = `average'
-    return scalar npoints            = `npoints'
-    return local  type               = "`type'"
-
-end
-
-
-mata:
-
-void _cs_region_integrate(string scalar ftname, string scalar fragname,
-                           real scalar ng, real scalar a0, real scalar b0)
-{
-    real matrix ft, fv
-    ft = st_matrix(ftname)
-    fv = st_matrix(fragname)
-
-    // Select points in [a0, b0] with finite values
-    real colvector x, y, keep
-    keep = (ft :>= a0) :& (ft :<= b0) :& (fv :!= .)
-    x    = select(ft, keep)
-    y    = select(fv, keep)
-
-    real scalar npts, integral, avg
-    npts = rows(x)
-
-    if (npts < 2) {
-        integral = .
-        avg      = .
+    if "`type'" == "curvature_ratio" {
+        di as text " "
+        di as text "  Interpretation (curvature_ratio):"
+        di as text "  < 0.5  : stable region (low curvature relative to slope)"
+        di as text "  0.5-2  : moderate structural change"
+        di as text "  > 2    : high fragility (threshold / turning point)"
     }
     else {
-        // Trapezoidal rule
-        real colvector dx, ymid
-        dx     = x[2::npts] - x[1::npts-1]
-        ymid   = (y[1::npts-1] + y[2::npts]) / 2
-        integral = sum(dx :* ymid)
-        avg      = integral / (x[npts] - x[1])
+        di as text " "
+        di as text "  Interpretation (inverse_slope):"
+        di as text "  Low    : steep causal effect (structurally strong)"
+        di as text "  High   : flat causal effect (structurally weak)"
     }
 
-    st_numscalar("r(integral)", integral)
-    st_numscalar("r(average)",  avg)
-    st_numscalar("r(npoints)",  npts)
-}
-
+    return scalar integral_frag = `integ'
+    return scalar avg_frag      = `avg'
+    return scalar grid_points   = `count'
+    return scalar a             = `a'
+    return scalar b             = `b'
+    return local  type          "`type'"
 end
